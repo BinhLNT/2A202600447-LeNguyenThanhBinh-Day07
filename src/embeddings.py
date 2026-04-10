@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
+
 
 LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+GEMINI_EMBEDDING_MODEL = "models/text-embedding-004"
 EMBEDDING_PROVIDER_ENV = "EMBEDDING_PROVIDER"
-
 
 class MockEmbedder:
     """Deterministic embedding backend used by tests and default classroom runs."""
@@ -25,7 +27,6 @@ class MockEmbedder:
         norm = math.sqrt(sum(value * value for value in vector)) or 1.0
         return [value / norm for value in vector]
 
-
 class LocalEmbedder:
     """Sentence Transformers-backed local embedder."""
 
@@ -42,7 +43,6 @@ class LocalEmbedder:
             return embedding.tolist()
         return [float(value) for value in embedding]
 
-
 class OpenAIEmbedder:
     """OpenAI embeddings API-backed embedder."""
 
@@ -57,5 +57,27 @@ class OpenAIEmbedder:
         response = self.client.embeddings.create(model=self.model_name, input=text)
         return [float(value) for value in response.data[0].embedding]
 
+class GeminiEmbedder:
+    """Google Gemini API-backed embedder."""
+
+    def __init__(self, model_name: str = GEMINI_EMBEDDING_MODEL) -> None:
+        # Lấy API Key từ biến môi trường
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("Vui lòng thiết lập biến môi trường GEMINI_API_KEY")
+        
+        genai.configure(api_key=api_key)
+        self.model_name = model_name
+        self._backend_name = f"gemini-{model_name}"
+
+    def __call__(self, text: str) -> list[float]:
+        # Gọi Gemini API để tạo embedding
+        # Lưu ý: Gemini miễn phí giới hạn 5 requests/phút
+        result = genai.embed_content(
+            model=self.model_name,
+            content=text,
+            task_type="retrieval_document"
+        )
+        return result['embedding']
 
 _mock_embed = MockEmbedder()
