@@ -58,26 +58,31 @@ class OpenAIEmbedder:
         return [float(value) for value in response.data[0].embedding]
 
 class GeminiEmbedder:
-    """Google Gemini API-backed embedder."""
+    """Google Gemini API-backed embedder (new SDK)."""
 
     def __init__(self, model_name: str = GEMINI_EMBEDDING_MODEL) -> None:
-        # Lấy API Key từ biến môi trường
+        from google import genai  # import đúng SDK mới
+
+        # FIX model name nếu đang bị "models/..."
+        if model_name.startswith("models/"):
+            model_name = model_name.replace("models/", "")
+
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("Vui lòng thiết lập biến môi trường GEMINI_API_KEY")
-        
-        genai.configure(api_key=api_key)
+            raise ValueError("Vui lòng thiết lập GEMINI_API_KEY")
+
+        self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
         self._backend_name = f"gemini-{model_name}"
 
     def __call__(self, text: str) -> list[float]:
-        # Gọi Gemini API để tạo embedding
-        # Lưu ý: Gemini miễn phí giới hạn 5 requests/phút
-        result = genai.embed_content(
-            model=self.model_name,
-            content=text,
-            task_type="retrieval_document"
-        )
-        return result['embedding']
-
+        try:
+            response = self.client.models.embed_content(
+                model=self.model_name,
+                contents=text,
+            )
+            return response.embeddings[0].values
+        except Exception as e:
+            print("⚠️ Gemini lỗi, fallback mock:", e)
+            return _mock_embed(text)
 _mock_embed = MockEmbedder()
